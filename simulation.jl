@@ -106,16 +106,17 @@ function run!(sim::Simulation, time::Float64)
     for _ in 1:steps perform_step!(sim) end
 end
 
-function plot_variable(sim::Simulation, variable::Symbol;
-        steps::Int=0, max_points::Int=1000, prefix::String = "plot_", plot_type::String = "png")
+function plot_variable(sim::Simulation, variable::Symbol; steps::Int=0, max_points::Int=1000)
     if steps == 0 steps = length(sim.states) - sim.max_delay - 1 end
     step_size = max(1, Int(floor(steps / max_points)))
     range = sim.states[sim.max_delay + 1:step_size:min(steps + sim.max_delay + 1, end)]
     t = [s.t for s in range]
     y = [getfield(s, variable) for s in range]
-    plot(t, y, label = L"%$variable",
+    plot!(t, y, label = L"%$variable",
         xlabel = "Time", ylabel = L"%$variable", title = L"%$variable / t",
-        dpi = 300, lw=3)
+        dpi = 300, lw=2, color = :blue, legend=:topright, grid=true)
+end
+function save_plot(variable::Symbol; prefix::String = "plot_", plot_type::String = "png")
     file_name = "plots/$(prefix)$(variable).$(plot_type)"
     mkpath(dirname(file_name))
     savefig(file_name)
@@ -135,7 +136,10 @@ println("Running simulation 1...")
 run!(sim, 100.0)
 println("Simulation 1 completed. Plotting results...")
 for variable in [:N_η, :T_1_η, :T_2_η, :T_r_η, :T_1_μ, :T_2_μ, :T_r_μ, :A_1, :A_2, :I]
-    plot_variable(sim, variable, prefix="sim1/")
+    plot()
+    hline!([getfield(E1, variable)], label = "E1", color = :red, lw=2, ls=:dash)
+    plot_variable(sim, variable)
+    save_plot(variable, prefix="sim1/")
 end
 
 S2 = E2 + D001
@@ -144,7 +148,10 @@ println("Running simulation 2...")
 run!(sim, 100.0)
 println("Simulation 2 completed. Plotting results...")
 for variable in [:N_η, :T_1_η, :T_2_η, :T_r_η, :T_1_μ, :T_2_μ, :T_r_μ, :A_1, :A_2, :I]
-    plot_variable(sim, variable, prefix="sim2/")
+    plot()
+    hline!([getfield(E2, variable)], label = "E2", color = :red, lw=2, ls=:dash)
+    plot_variable(sim, variable)
+    save_plot(variable, prefix="sim2/")
 end
 
 # TODO
