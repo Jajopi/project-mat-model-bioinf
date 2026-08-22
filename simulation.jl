@@ -9,6 +9,7 @@ using Parameters
 using Plots
 using LaTeXStrings
 
+
 struct SimulationState
         t::Float64 # Time
     # Non-mucosal compartment
@@ -101,21 +102,25 @@ function perform_step!(sim::Simulation)
     push!(sim.states, new_state)
 end
 function run!(sim::Simulation, time::Float64)
-    steps = Int(time / sim.Δ)
+    steps = Int(time / sim.Δ) + 1
     for _ in 1:steps perform_step!(sim) end
 end
 
-function plot_variable(sim::Simulation, variable::Symbol, steps::Int, prefix::String = "plot_", plot_type::String = "png")
+function plot_variable(sim::Simulation, variable::Symbol; steps::Int=0, prefix::String = "plot_", plot_type::String = "png")
+    if steps == 0 steps = length(sim.states) - sim.max_delay - 1 end
     range = sim.states[sim.max_delay + 1:min(steps + sim.max_delay + 1, end)]
     t = [s.t for s in range]
     y = [getfield(s, variable) for s in range]
     plot(t, y, label = L"%$variable",
         xlabel = "Time", ylabel = L"%$variable", title = L"%$variable / t",
         dpi = 300, lw=3)
-    mkpath("plots")
-    savefig("plots/$(prefix)$(variable).$(plot_type)")
+    file_name = "plots/$(prefix)$(variable).$(plot_type)"
+    mkpath(dirname(file_name))
+    savefig(file_name)
 end
 
+
+# Replicating the plots from the paper
 
 E1 = SimulationState(0, 0.6667, 0, 0, 0, 0, 0, 0, 0.3750, 1.8750, 0.3367)
 E2 = SimulationState(0, 0.6623, 1.0549e-4, 0, 0, 9.5901e-6, 0, 0, 0.3750, 1.8750, 0.3361)
@@ -123,16 +128,21 @@ E2 = SimulationState(0, 0.6623, 1.0549e-4, 0, 0, 9.5901e-6, 0, 0, 0.3750, 1.8750
 D001 = SimulationState(0, 0.01, 0.01, 0.01, 0.01, 0.01, 0.01, 0.01, 0.01, 0.01, 0.01)
 
 S1 = E1 + D001
-S2 = E2 + D001
-
 sim = Simulation(SimulationParams(), 0.01, S1)
+println("Running simulation 1...")
 run!(sim, 200.0)
+println("Simulation 1 completed. Plotting results...")
 for variable in [:N_η, :T_1_η, :T_2_η, :T_r_η, :T_1_μ, :T_2_μ, :T_r_μ, :A_1, :A_2, :I]
-    plot_variable(sim, variable, prefix="S1_")
+    plot_variable(sim, variable, prefix="sim1/")
 end
 
+S2 = E2 + D001
 sim = Simulation(SimulationParams(), 0.01, S2)
+println("Running simulation 2...")
 run!(sim, 200.0)
+println("Simulation 2 completed. Plotting results...")
 for variable in [:N_η, :T_1_η, :T_2_η, :T_r_η, :T_1_μ, :T_2_μ, :T_r_μ, :A_1, :A_2, :I]
-    plot_variable(sim, variable, prefix="S2_")
+    plot_variable(sim, variable, prefix="sim2/")
 end
+
+# TODO
