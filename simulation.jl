@@ -1,4 +1,13 @@
+#!/usr/bin/env julia
+
+# import Pkg;
+# Pkg.add("Parameters")
+# Pkg.add("Plots")
+# Pkg.add("LaTeXStrings")
+
 using Parameters
+using Plots
+using LaTeXStrings
 
 struct SimulationState
        t::Float64
