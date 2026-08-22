@@ -25,6 +25,14 @@ struct SimulationState
         I::Float64 # IL-6
 end
 
+function Base.:+(s1::SimulationState, disturbances::SimulationState)
+    d = disturbances
+    return SimulationState(s1.t, s1.N_η + d.N_η,
+        s1.T_1_η + d.T_1_η, s1.T_2_η + d.T_2_η, s1.T_r_η + d.T_r_η,
+        s1.T_1_μ + d.T_1_μ, s1.T_2_μ + d.T_2_μ, s1.T_r_μ + d.T_r_μ,
+        s1.A_1 + d.A_1, s1.A_2 + d.A_2, s1.I + d.I)
+end
+
 @kwdef struct SimulationParams
      α::Float64 = 0.02    # The production rate of naive cells [27]
      v::Float64 = 1       # The proliferation rate of stimulated T cells [14]
