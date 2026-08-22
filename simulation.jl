@@ -10,17 +10,19 @@ using Plots
 using LaTeXStrings
 
 struct SimulationState
-       t::Float64
-     N_η::Float64
-    T_1η::Float64
-    T_2η::Float64
-    T_rη::Float64
-    T_1μ::Float64
-    T_2μ::Float64
-    T_rμ::Float64
-     A_1::Float64
-     A_2::Float64
-       I::Float64
+        t::Float64 # Time
+    # Non-mucosal compartment
+      N_η::Float64 # Naive T cells
+    T_1_η::Float64 # Th1 cells
+    T_2_η::Float64 # Th2 cells
+    T_r_η::Float64 # T_reg cells
+    # Mucosal compartment
+    T_1_μ::Float64 # Th1 cells
+    T_2_μ::Float64 # Th2 cells
+    T_r_μ::Float64 # T_reg cells
+      A_1::Float64 # Naive APCs
+      A_2::Float64 # Mature APCs
+        I::Float64 # IL-6
 end
 
 @kwdef struct SimulationParams
@@ -51,33 +53,46 @@ end
 end
 
 struct Simulation
-    p::SimulationParams
+    params::SimulationParams
     Δ::Float64
     d_τ1::Int
     d_τ2::Int
     d_τ3::Int
+    max_delay::Int
     states::Array{SimulationState, 1}
     function Simulation(params::SimulationParams, Δ::Float64, state::SimulationState)
-        new(params, Δ, Int(params.τ1 / Δ), Int(params.τ2 / Δ), Int(params.τ3 / Δ), [state])
+        d_τ1 = Int(floor(params.τ1 / Δ))
+        d_τ2 = Int(floor(params.τ2 / Δ))
+        d_τ3 = Int(floor(params.τ3 / Δ))
+        max_delay = max(d_τ1, d_τ2, d_τ3)
+        states = [state for _ in 1:(max_delay + 1)]
+        new(params, Δ, d_τ1, d_τ2, d_τ3, max_delay, states)
     end
-    function perform_step()
-        s = states[end]
-        s_τ1 = states[end - d_τ1]
-        s_τ2 = states[end - d_τ2]
-        s_τ3 = states[end - d_τ3]
+end
+function perform_step!(sim::Simulation)
+    p = sim.params
+    Δ = sim.Δ
+    s = sim.states[end]
+    s_τ1 = sim.states[end - sim.d_τ1]
+    s_τ2 = sim.states[end - sim.d_τ2]
+    s_τ3 = sim.states[end - sim.d_τ3]
 
-        states.push!(
-            s.t + Δ,
-            s.N_η  + Δ * (p.α - p.γ3 * s.N_η - s.N_η * s_τ2.A_2 * s.T_1η / (1 + p.μ2 * s.T_2η) - p.ϕ * s.N_η * s_τ2.A_2 * s.T_2η - p.κ * s.N_η * s_τ2.A_2 * s.T_rη),
-            s.T_1η + Δ * (-(1 + p.θ) * s.T_1η + p.θ * s_τ3.T_1μ +       p.v * s.N_η * s_τ2.A_2 / (1 + p.μr * s.T_rη) * s.T_1η / (1 + p.μ2 * s.T_2η)                       - p.η1 * s.I * s.T_1η / (1 + s.I)),
-            s.T_2η + Δ * (-(1 + p.θ) * s.T_2η + p.θ * s_τ3.T_2μ + p.ϕ * p.v * s.N_η * s_τ2.A_2 / (1 + p.μr * s.T_rη) * s.T_2η / (1 + p.μ1 * s.T_1η / (1 + p.μ2 * s.T_2η)) + p.η2 * s.I * s.T_2η / (1 + s.I)),
-            s.T_rη + Δ * (-(1 + p.θ) * s.T_rη + p.θ * s_τ3.T_rμ + p.κ * p.v * s.N_η * s_τ2.A_2 * s.T_rη                                                                   - p.ηr * s.I * s.T_rη / (1 + s.I)),
-            s.T_1μ + Δ * (-(1 + p.θ) * s.T_1μ + p.θ * s_τ3.T_1η),
-            s.T_2μ + Δ * (-(1 + p.θ) * s.T_2μ + p.θ * s_τ3.T_2η),
-            s.T_rμ + Δ * (-(1 + p.θ) * s.T_rμ + p.θ * s_τ3.T_rη),
-            s.A_1  + Δ * (p.λ - p.γ1 * s.A_1 - p.β * p.Λ * s.A_1),
-            s.A_2  + Δ * (p.β * p.Λ * s.A_1 - p.γ2 * s.A_2 - p.μ * s.A_2 * s.T_rη),
-            s.I    + Δ * (-p.γ4 * s.I + p.k1 * (s_τ1.A_2 + s_τ1.N_η + s_τ1.T_1η + s_τ1.T_2η + s_τ1.T_rη))
-        )
-    end
+    new_state = SimulationState(
+        s.t + Δ,
+        s.N_η  + Δ * (p.α - p.γ3 * s.N_η - s.N_η * s_τ2.A_2 * s.T_1_η / (1 + p.μ2 * s.T_2_η) - p.ϕ * s.N_η * s_τ2.A_2 * s.T_2_η - p.κ * s.N_η * s_τ2.A_2 * s.T_r_η),
+        s.T_1_η + Δ * (-(1 + p.θ) * s.T_1_η + p.θ * s_τ3.T_1_μ +       p.v * s.N_η * s_τ2.A_2 / (1 + p.μr * s.T_r_η) * s.T_1_η / (1 + p.μ2 * s.T_2_η)                       - p.η1 * s.I * s.T_1_η / (1 + s.I)),
+        s.T_2_η + Δ * (-(1 + p.θ) * s.T_2_η + p.θ * s_τ3.T_2_μ + p.ϕ * p.v * s.N_η * s_τ2.A_2 / (1 + p.μr * s.T_r_η) * s.T_2_η / (1 + p.μ1 * s.T_1_η / (1 + p.μ2 * s.T_2_η)) + p.η2 * s.I * s.T_2_η / (1 + s.I)),
+        s.T_r_η + Δ * (-(1 + p.θ) * s.T_r_η + p.θ * s_τ3.T_r_μ + p.κ * p.v * s.N_η * s_τ2.A_2 * s.T_r_η                                                                   - p.ηr * s.I * s.T_r_η / (1 + s.I)),
+        s.T_1_μ + Δ * (-(1 + p.θ) * s.T_1_μ + p.θ * s_τ3.T_1_η),
+        s.T_2_μ + Δ * (-(1 + p.θ) * s.T_2_μ + p.θ * s_τ3.T_2_η),
+        s.T_r_μ + Δ * (-(1 + p.θ) * s.T_r_μ + p.θ * s_τ3.T_r_η),
+        s.A_1  + Δ * (p.λ - p.γ1 * s.A_1 - p.β * p.Λ * s.A_1),
+        s.A_2  + Δ * (p.β * p.Λ * s.A_1 - p.γ2 * s.A_2 - p.μ * s.A_2 * s.T_r_η),
+        s.I    + Δ * (-p.γ4 * s.I + p.k1 * (s_τ1.A_2 + s_τ1.N_η + s_τ1.T_1_η + s_τ1.T_2_η + s_τ1.T_r_η))
+    )
+    push!(sim.states, new_state)
+end
+function run!(sim::Simulation, time::Float64)
+    steps = Int(time / sim.Δ)
+    for _ in 1:steps perform_step!(sim) end
 end
