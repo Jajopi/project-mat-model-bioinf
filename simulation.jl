@@ -106,9 +106,11 @@ function run!(sim::Simulation, time::Float64)
     for _ in 1:steps perform_step!(sim) end
 end
 
-function plot_variable(sim::Simulation, variable::Symbol; steps::Int=0, prefix::String = "plot_", plot_type::String = "png")
+function plot_variable(sim::Simulation, variable::Symbol;
+        steps::Int=0, max_points::Int=1000, prefix::String = "plot_", plot_type::String = "png")
     if steps == 0 steps = length(sim.states) - sim.max_delay - 1 end
-    range = sim.states[sim.max_delay + 1:min(steps + sim.max_delay + 1, end)]
+    step_size = max(1, Int(floor(steps / max_points)))
+    range = sim.states[sim.max_delay + 1:step_size:min(steps + sim.max_delay + 1, end)]
     t = [s.t for s in range]
     y = [getfield(s, variable) for s in range]
     plot(t, y, label = L"%$variable",
@@ -128,18 +130,18 @@ E2 = SimulationState(0, 0.6623, 1.0549e-4, 0, 0, 9.5901e-6, 0, 0, 0.3750, 1.8750
 D001 = SimulationState(0, 0.01, 0.01, 0.01, 0.01, 0.01, 0.01, 0.01, 0.01, 0.01, 0.01)
 
 S1 = E1 + D001
-sim = Simulation(SimulationParams(), 0.01, S1)
+sim = Simulation(SimulationParams(), 1e-5, S1)
 println("Running simulation 1...")
-run!(sim, 200.0)
+run!(sim, 100.0)
 println("Simulation 1 completed. Plotting results...")
 for variable in [:N_η, :T_1_η, :T_2_η, :T_r_η, :T_1_μ, :T_2_μ, :T_r_μ, :A_1, :A_2, :I]
     plot_variable(sim, variable, prefix="sim1/")
 end
 
 S2 = E2 + D001
-sim = Simulation(SimulationParams(), 0.01, S2)
+sim = Simulation(SimulationParams(), 1e-5, S2)
 println("Running simulation 2...")
-run!(sim, 200.0)
+run!(sim, 100.0)
 println("Simulation 2 completed. Plotting results...")
 for variable in [:N_η, :T_1_η, :T_2_η, :T_r_η, :T_1_μ, :T_2_μ, :T_r_μ, :A_1, :A_2, :I]
     plot_variable(sim, variable, prefix="sim2/")
