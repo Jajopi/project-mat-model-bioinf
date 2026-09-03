@@ -1,14 +1,10 @@
 #!/usr/bin/env julia
 
-# import Pkg;
-# Pkg.add("Parameters")
-# Pkg.add("Plots")
-# Pkg.add("LaTeXStrings")
+# Functions to run the simulation and plot the results
 
 using Parameters
 using Plots
 using LaTeXStrings
-
 
 struct SimulationState
         t::Float64 # Time
@@ -61,55 +57,81 @@ end
      μ::Float64 = 10^-2   # The rate of APC inhibition by regulatory T cells [13]
 end
 
-struct Simulation
+mutable struct Simulation
     params::SimulationParams
     Δ::Float64
     d_τ1::Int
     d_τ2::Int
     d_τ3::Int
-    max_delay::Int
-    states::Array{SimulationState, 1}
-    function Simulation(params::SimulationParams, Δ::Float64, state::SimulationState)
+    actual_states_stored::Int
+    actual_states::Array{SimulationState, 1}
+    save_frequency::Int
+    saved_states::Array{SimulationState}
+
+    function Simulation(params::SimulationParams, initial_state::SimulationState; Δ::Float64 = 1e-5, save_frequency::Int = 1)
         d_τ1 = Int(floor(params.τ1 / Δ))
         d_τ2 = Int(floor(params.τ2 / Δ))
         d_τ3 = Int(floor(params.τ3 / Δ))
-        max_delay = max(d_τ1, d_τ2, d_τ3)
-        states = [state for _ in 1:(max_delay + 1)]
-        new(params, Δ, d_τ1, d_τ2, d_τ3, max_delay, states)
+        actual_states_stored = max(d_τ1, d_τ2, d_τ3) + 1
+        actual_states = [initial_state for _ in 1:actual_states_stored]
+        new(params, Δ, d_τ1, d_τ2, d_τ3, actual_states_stored, actual_states, max(1, save_frequency), [])
     end
 end
-function perform_step!(sim::Simulation)
+function perform_step!(sim::Simulation, step::Int)
     p = sim.params
     Δ = sim.Δ
-    s = sim.states[end]
-    s_τ1 = sim.states[end - sim.d_τ1]
-    s_τ2 = sim.states[end - sim.d_τ2]
-    s_τ3 = sim.states[end - sim.d_τ3]
+    s = sim.actual_states[step % sim.actual_states_stored + 1]
+    s_τ1 = sim.actual_states[(step + sim.actual_states_stored - sim.d_τ1) % sim.actual_states_stored + 1]
+    s_τ2 = sim.actual_states[(step + sim.actual_states_stored - sim.d_τ2) % sim.actual_states_stored + 1]
+    s_τ3 = sim.actual_states[(step + sim.actual_states_stored - sim.d_τ3) % sim.actual_states_stored + 1]
+
+    if step % sim.save_frequency == 0 push!(sim.saved_states, s) end
 
     new_state = SimulationState(
         s.t + Δ,
-        s.N_η  + Δ * (p.α - p.γ3 * s.N_η - s.N_η * s_τ2.A_2 * s.T_1_η / (1 + p.μ2 * s.T_2_η) - p.ϕ * s.N_η * s_τ2.A_2 * s.T_2_η - p.κ * s.N_η * s_τ2.A_2 * s.T_r_η),
+        s.N_η   + Δ * (p.α - p.γ3 * s.N_η - s.N_η * s_τ2.A_2 * s.T_1_η / (1 + p.μ2 * s.T_2_η) - p.ϕ * s.N_η * s_τ2.A_2 * s.T_2_η - p.κ * s.N_η * s_τ2.A_2 * s.T_r_η),
         s.T_1_η + Δ * (-(1 + p.θ) * s.T_1_η + p.θ * s_τ3.T_1_μ +       p.v * s.N_η * s_τ2.A_2 / (1 + p.μr * s.T_r_η) * s.T_1_η / (1 + p.μ2 * s.T_2_η)                       - p.η1 * s.I * s.T_1_η / (1 + s.I)),
         s.T_2_η + Δ * (-(1 + p.θ) * s.T_2_η + p.θ * s_τ3.T_2_μ + p.ϕ * p.v * s.N_η * s_τ2.A_2 / (1 + p.μr * s.T_r_η) * s.T_2_η / (1 + p.μ1 * s.T_1_η / (1 + p.μ2 * s.T_2_η)) + p.η2 * s.I * s.T_2_η / (1 + s.I)),
         s.T_r_η + Δ * (-(1 + p.θ) * s.T_r_η + p.θ * s_τ3.T_r_μ + p.κ * p.v * s.N_η * s_τ2.A_2 * s.T_r_η                                                                   - p.ηr * s.I * s.T_r_η / (1 + s.I)),
         s.T_1_μ + Δ * (-(1 + p.θ) * s.T_1_μ + p.θ * s_τ3.T_1_η),
         s.T_2_μ + Δ * (-(1 + p.θ) * s.T_2_μ + p.θ * s_τ3.T_2_η),
         s.T_r_μ + Δ * (-(1 + p.θ) * s.T_r_μ + p.θ * s_τ3.T_r_η),
-        s.A_1  + Δ * (p.λ - p.γ1 * s.A_1 - p.β * p.Λ * s.A_1),
-        s.A_2  + Δ * (p.β * p.Λ * s.A_1 - p.γ2 * s.A_2 - p.μ * s.A_2 * s.T_r_η),
-        s.I    + Δ * (-p.γ4 * s.I + p.k1 * (s_τ1.A_2 + s_τ1.N_η + s_τ1.T_1_η + s_τ1.T_2_η + s_τ1.T_r_η))
+        s.A_1   + Δ * (p.λ - p.γ1 * s.A_1 - p.β * p.Λ * s.A_1),
+        s.A_2   + Δ * (p.β * p.Λ * s.A_1 - p.γ2 * s.A_2 - p.μ * s.A_2 * s.T_r_η),
+        s.I     + Δ * (-p.γ4 * s.I + p.k1 * (s_τ1.A_2 + s_τ1.N_η + s_τ1.T_1_η + s_τ1.T_2_η + s_τ1.T_r_η))
     )
-    push!(sim.states, new_state)
+    sim.actual_states[(step + 1) % sim.actual_states_stored + 1] = new_state
+end
+function run!(sim::Simulation, steps::Int)
+    for step in 1:steps perform_step!(sim, step) end
 end
 function run!(sim::Simulation, time::Float64)
-    steps = Int(time / sim.Δ) + 1
-    for _ in 1:steps perform_step!(sim) end
+    steps = Int(floor(time / sim.Δ)) + 1
+    run!(sim, steps)
+end
+function run_until_convergence!(sim::Simulation; convergence_threshold::Float64=1e-8, divergence_threshold::Float64=1e12, max_time::Float64=1e3, max_steps::Int=0)
+    time_steps = Int(floor(max_time / sim.Δ)) + 1
+    max_steps = (max_steps > 0) ? min(time_steps, max_steps) : time_steps
+    for step in 1:max_steps
+        perform_step!(sim, step)
+        prev_state = sim.actual_states[step % sim.actual_states_stored + 1]
+        curr_state = sim.actual_states[(step + 1) % sim.actual_states_stored + 1]
+        if all(abs(getfield(curr_state, field) - getfield(prev_state, field)) / sim.Δ < convergence_threshold for field in fieldnames(SimulationState)[2:end])
+            println("Simulation converged at step $step.")
+            return
+        end
+        if any(abs(getfield(curr_state, field)) / sim.Δ > divergence_threshold for field in fieldnames(SimulationState)[2:end])
+            println("Simulation diverged at step $step.")
+            return
+        end
+    end
+    println("$max_steps steps reached without convergence or divergence.")
 end
 
-function plot_variable(sim::Simulation, variable::Symbol; steps::Int=0, max_points::Int=1000)
-    if steps == 0 steps = length(sim.states) - sim.max_delay - 1 end
-    step_size = max(1, Int(floor(steps / max_points)))
-    range = sim.states[sim.max_delay + 1:step_size:min(steps + sim.max_delay + 1, end)]
+function plot_variable(sim::Simulation, variable::Symbol; steps::Int=0, max_points_roughly::Int=1000)
+    if steps == 0 steps = length(sim.saved_states) end
+    step_size = max(1, Int(floor(steps / max_points_roughly)))
+    range = sim.saved_states[1:step_size:end]
     t = [s.t for s in range]
     y = [getfield(s, variable) for s in range]
     plot!(t, y, label = L"%$variable",
@@ -121,37 +143,3 @@ function save_plot(variable::Symbol; prefix::String = "plot_", plot_type::String
     mkpath(dirname(file_name))
     savefig(file_name)
 end
-
-
-# Replicating the plots from the paper
-
-E1 = SimulationState(0, 0.6667, 0, 0, 0, 0, 0, 0, 0.3750, 1.8750, 0.3367)
-E2 = SimulationState(0, 0.6623, 1.0549e-4, 0, 0, 9.5901e-6, 0, 0, 0.3750, 1.8750, 0.3361)
-
-D001 = SimulationState(0, 0.01, 0.01, 0.01, 0.01, 0.01, 0.01, 0.01, 0.01, 0.01, 0.01)
-
-S1 = E1 + D001
-sim = Simulation(SimulationParams(), 1e-5, S1)
-println("Running simulation 1...")
-run!(sim, 100.0)
-println("Simulation 1 completed. Plotting results...")
-for variable in [:N_η, :T_1_η, :T_2_η, :T_r_η, :T_1_μ, :T_2_μ, :T_r_μ, :A_1, :A_2, :I]
-    plot()
-    hline!([getfield(E1, variable)], label = "E1", color = :red, lw=2, ls=:dash)
-    plot_variable(sim, variable)
-    save_plot(variable, prefix="sim1/")
-end
-
-S2 = E2 + D001
-sim = Simulation(SimulationParams(), 1e-5, S2)
-println("Running simulation 2...")
-run!(sim, 100.0)
-println("Simulation 2 completed. Plotting results...")
-for variable in [:N_η, :T_1_η, :T_2_η, :T_r_η, :T_1_μ, :T_2_μ, :T_r_μ, :A_1, :A_2, :I]
-    plot()
-    hline!([getfield(E2, variable)], label = "E2", color = :red, lw=2, ls=:dash)
-    plot_variable(sim, variable)
-    save_plot(variable, prefix="sim2/")
-end
-
-# TODO
