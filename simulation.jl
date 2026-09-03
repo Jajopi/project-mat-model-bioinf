@@ -109,7 +109,7 @@ function run!(sim::Simulation, time::Float64)
     steps = Int(floor(time / sim.Δ)) + 1
     run!(sim, steps)
 end
-function run_until_convergence!(sim::Simulation; convergence_threshold::Float64=1e-8, divergence_threshold::Float64=1e12, max_time::Float64=1e3, max_steps::Int=0)
+function run_until_convergence!(sim::Simulation; convergence_threshold::Float64=1e-6, divergence_threshold::Float64=1e12, max_time::Float64=1e3, max_steps::Int=0)
     time_steps = Int(floor(max_time / sim.Δ)) + 1
     max_steps = (max_steps > 0) ? min(time_steps, max_steps) : time_steps
     for step in 1:max_steps
