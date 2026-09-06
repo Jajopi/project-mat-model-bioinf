@@ -173,11 +173,12 @@ end
 
 # Running basic experiments
 
-function perform_experiment(S::SimulationState, name::String; time::Float64=0.0)
+function perform_experiment(S::SimulationState, name::String; E::Union{SimulationState, Nothing}=nothing, time::Float64=0.0)
     sim = Simulation(SimulationParams(), S, save_frequency=1000)
     if time == 0 run_until_convergence!(sim, max_time=2e3) else run!(sim, time) end
     for variable in [:N_η, :T_1_η, :T_2_η, :T_r_η, :T_1_μ, :T_2_μ, :T_r_μ, :A_1, :A_2, :I]
         plot()
+        if E !== nothing hline!([getfield(E, variable)], label="Equilibrium", color=:red, lw=2, ls=:dash) end
         plot_variable(sim, variable)
         save_plot(variable, prefix=name)
     end
@@ -187,20 +188,5 @@ function perform_experiment(S::SimulationState, name::String; time::Float64=0.0)
     plot()
     plot_multiple_variables(sim, [:A_1, :A_2], steps=1000)
     save_plot("APCs", prefix=name)
-end
-function perform_experiment(S::SimulationState, name::String, E::SimulationState; time::Float64=0.0)
-    sim = Simulation(SimulationParams(), S, save_frequency=1000)
-    if time == 0 run_until_convergence!(sim, max_time=2e3) else run!(sim, time) end
-    for variable in [:N_η, :T_1_η, :T_2_η, :T_r_η, :T_1_μ, :T_2_μ, :T_r_μ, :A_1, :A_2, :I]
-        plot()
-        hline!([getfield(E, variable)], label="Equilibrium", color=:red, lw=2, ls=:dash)
-        plot_variable(sim, variable)
-        save_plot(variable, prefix=name)
-    end
-    plot()
-    plot_multiple_variables(sim, [:T_1_η, :T_2_η, :T_r_η, :T_1_μ, :T_2_μ, :T_r_μ], steps=1000)
-    save_plot("T_cells", prefix=name)
-    plot()
-    plot_multiple_variables(sim, [:A_1, :A_2], steps=1000)
-    save_plot("APCs", prefix=name)
+    println("Done")
 end
