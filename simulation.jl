@@ -177,6 +177,7 @@ function perform_experiment(S::SimulationState, name::String; time::Float64=0.0)
     sim = Simulation(SimulationParams(), S, save_frequency=1000)
     if time == 0 run_until_convergence!(sim, max_time=2e3) else run!(sim, time) end
     for variable in [:N_η, :T_1_η, :T_2_η, :T_r_η, :T_1_μ, :T_2_μ, :T_r_μ, :A_1, :A_2, :I]
+        plot()
         plot_variable(sim, variable)
         save_plot(variable, prefix=name)
     end
