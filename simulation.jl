@@ -112,24 +112,29 @@ function run!(sim::Simulation, time::Float64)
     steps = Int(floor(time / sim.Δ)) + 1
     run!(sim, steps)
 end
-function run_until_convergence!(sim::Simulation; convergence_threshold::Float64=1e-6, divergence_threshold::Float64=1e12, max_time::Float64=1e3, max_steps::Int=0)
+function run_until_convergence!(sim::Simulation; convergence_threshold::Float64=1e-8, divergence_threshold::Float64=1e12, max_time::Float64=1e3, max_steps::Int=0)
     time_steps = Int(floor(max_time / sim.Δ)) + 1
     max_steps = (max_steps > 0) ? min(time_steps, max_steps) : time_steps
-    for step in 1:max_steps
+    Δ = sim.Δ * sim.actual_states_stored
+    for step in 1:sim.actual_states_stored perform_step!(sim, step) end
+    for step in sim.actual_states_stored:max_steps
         perform_step!(sim, step)
-        prev_state = sim.actual_states[step % sim.actual_states_stored + 1]
+        prev_state = sim.actual_states[(step - sim.actual_states_stored + 2) % sim.actual_states_stored + 1]
         curr_state = sim.actual_states[(step + 1) % sim.actual_states_stored + 1]
-        if all(abs(getfield(curr_state, field) - getfield(prev_state, field)) / sim.Δ < convergence_threshold for field in fieldnames(SimulationState)[2:end])
-            println("Simulation converged at step $step.")
+        if all(abs(getfield(curr_state, field) - getfield(prev_state, field)) < convergence_threshold * Δ for field in fieldnames(SimulationState)[2:end])
+            println("Simulation converged at step $step., time $(curr_state.t).")
             return
         end
-        if any(abs(getfield(curr_state, field)) / sim.Δ > divergence_threshold for field in fieldnames(SimulationState)[2:end])
-            println("Simulation diverged at step $step.")
+        if any(abs(getfield(curr_state, field)) > divergence_threshold * Δ for field in fieldnames(SimulationState)[2:end])
+            println("Simulation diverged at step $step, time $(curr_state.t).")
             return
         end
     end
-    println("$max_steps steps reached without convergence or divergence.")
+    println("$max_steps steps (time $max_time), reached without convergence or divergence.")
 end
+
+
+# Plotting
 
 function plot_variable(sim::Simulation, variable::Symbol; steps::Int=0, max_points_roughly::Int=1000)
     if steps == 0 steps = length(sim.saved_states) end
