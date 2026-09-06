@@ -6,6 +6,9 @@ using Parameters
 using Plots
 using LaTeXStrings
 
+
+# Simulation
+
 struct SimulationState
         t::Float64 # Time
     # Non-mucosal compartment
@@ -138,8 +141,60 @@ function plot_variable(sim::Simulation, variable::Symbol; steps::Int=0, max_poin
         xlabel = "Time", ylabel = L"%$variable", title = L"%$variable / t",
         dpi = 300, lw=2, color = :blue, legend=:topright, grid=true)
 end
+function plot_multiple_variables(sim::Simulation, variables::Vector{Symbol}; steps::Int=0, max_points_roughly::Int=1000)
+    if steps == 0 steps = length(sim.saved_states) end
+    step_size = max(1, Int(floor(steps / max_points_roughly)))
+    range = sim.saved_states[1:step_size:end]
+    t = [s.t for s in range]
+    variable_names = join([string(variable) for variable in variables], ", ")
+    plot!(xlabel = "Time", title = L"%$variable_names / t",
+        dpi = 300, legend=:topright, grid=true)
+    for variable in variables
+        y = [getfield(s, variable) for s in range]
+        plot!(t, y, label = L"%$variable", lw=2)
+    end
+end
 function save_plot(variable::Symbol; prefix::String = "plot_", plot_type::String = "png")
     file_name = "plots/$(prefix)$(variable).$(plot_type)"
     mkpath(dirname(file_name))
     savefig(file_name)
+end
+function save_plot(name::String; prefix::String = "plot_", plot_type::String = "png")
+    file_name = "plots/$(prefix)$(name).$(plot_type)"
+    mkpath(dirname(file_name))
+    savefig(file_name)
+end
+
+
+# Running basic experiments
+
+function perform_experiment(S::SimulationState, name::String; time::Float64=0.0)
+    sim = Simulation(SimulationParams(), S, save_frequency=1000)
+    if time == 0 run_until_convergence!(sim, max_time=2e3) else run!(sim, time) end
+    for variable in [:N_η, :T_1_η, :T_2_η, :T_r_η, :T_1_μ, :T_2_μ, :T_r_μ, :A_1, :A_2, :I]
+        plot_variable(sim, variable)
+        save_plot(variable, prefix=name)
+    end
+    plot()
+    plot_multiple_variables(sim, [:T_1_η, :T_2_η, :T_r_η, :T_1_μ, :T_2_μ, :T_r_μ], steps=1000)
+    save_plot("T_cells", prefix=name)
+    plot()
+    plot_multiple_variables(sim, [:A_1, :A_2], steps=1000)
+    save_plot("APCs", prefix=name)
+end
+function perform_experiment(S::SimulationState, name::String, E::SimulationState; time::Float64=0.0)
+    sim = Simulation(SimulationParams(), S, save_frequency=1000)
+    if time == 0 run_until_convergence!(sim, max_time=2e3) else run!(sim, time) end
+    for variable in [:N_η, :T_1_η, :T_2_η, :T_r_η, :T_1_μ, :T_2_μ, :T_r_μ, :A_1, :A_2, :I]
+        plot()
+        hline!([getfield(E, variable)], label="Equilibrium", color=:red, lw=2, ls=:dash)
+        plot_variable(sim, variable)
+        save_plot(variable, prefix=name)
+    end
+    plot()
+    plot_multiple_variables(sim, [:T_1_η, :T_2_η, :T_r_η, :T_1_μ, :T_2_μ, :T_r_μ], steps=1000)
+    save_plot("T_cells", prefix=name)
+    plot()
+    plot_multiple_variables(sim, [:A_1, :A_2], steps=1000)
+    save_plot("APCs", prefix=name)
 end
