@@ -68,16 +68,16 @@ mutable struct Simulation
     d_τ3::Int
     actual_states_stored::Int
     actual_states::Array{SimulationState, 1}
-    save_frequency::Int
+    save_every_nth_step::Int
     saved_states::Array{SimulationState}
 
-    function Simulation(params::SimulationParams, initial_state::SimulationState; Δ::Float64 = 1e-5, save_frequency::Int = 1)
+    function Simulation(params::SimulationParams, initial_state::SimulationState; Δ::Float64 = 1e-5, save_every_nth_step::Int = 1)
         d_τ1 = Int(floor(params.τ1 / Δ))
         d_τ2 = Int(floor(params.τ2 / Δ))
         d_τ3 = Int(floor(params.τ3 / Δ))
         actual_states_stored = max(d_τ1, d_τ2, d_τ3) + 1
         actual_states = [initial_state for _ in 1:actual_states_stored]
-        new(params, Δ, d_τ1, d_τ2, d_τ3, actual_states_stored, actual_states, max(1, save_frequency), [])
+        new(params, Δ, d_τ1, d_τ2, d_τ3, actual_states_stored, actual_states, max(1, save_every_nth_step), [])
     end
 end
 function perform_step!(sim::Simulation, step::Int)
@@ -88,7 +88,7 @@ function perform_step!(sim::Simulation, step::Int)
     s_τ2 = sim.actual_states[(step + sim.actual_states_stored - sim.d_τ2) % sim.actual_states_stored + 1]
     s_τ3 = sim.actual_states[(step + sim.actual_states_stored - sim.d_τ3) % sim.actual_states_stored + 1]
 
-    if step % sim.save_frequency == 0 push!(sim.saved_states, s) end
+    if step % sim.save_every_nth_step == 0 push!(sim.saved_states, s) end
 
     new_state = SimulationState(
         s.t + Δ,
@@ -174,7 +174,7 @@ end
 # Running basic experiments
 
 function perform_experiment(S::SimulationState, name::String; E::Union{SimulationState, Nothing}=nothing, time::Float64=0.0)
-    sim = Simulation(SimulationParams(), S, save_frequency=1000)
+    sim = Simulation(SimulationParams(), S, save_every_nth_step=1000)
     if time == 0 run_until_convergence!(sim, max_time=2e3) else run!(sim, time) end
     for variable in [:N_η, :T_1_η, :T_2_η, :T_r_η, :T_1_μ, :T_2_μ, :T_r_μ, :A_1, :A_2, :I]
         plot()
@@ -183,10 +183,37 @@ function perform_experiment(S::SimulationState, name::String; E::Union{Simulatio
         save_plot(variable, prefix=name)
     end
     plot()
-    plot_multiple_variables(sim, [:T_1_η, :T_2_η, :T_r_η, :T_1_μ, :T_2_μ, :T_r_μ], steps=1000)
+    plot_multiple_variables(sim, [:T_1_η, :T_2_η, :T_r_η, :T_1_μ, :T_2_μ, :T_r_μ])
     save_plot("T_cells", prefix=name)
     plot()
-    plot_multiple_variables(sim, [:A_1, :A_2], steps=1000)
+    plot_multiple_variables(sim, [:A_1, :A_2])
+    save_plot("APCs", prefix=name)
+    println("Done")
+end
+
+function perform_experiment_with_repeated_addition(S::SimulationState, name::String; E::Union{SimulationState, Nothing}=nothing, time::Float64=0.0, addition::SimulationState=SimulationState(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0), addition_interval::Float64=1.0)
+    sim = Simulation(SimulationParams(), S, save_every_nth_step=1000)
+    steps_per_addition = Int(floor(addition_interval / sim.Δ))
+    total_steps = Int(floor(time / sim.Δ))
+    for step in 1:total_steps
+        perform_step!(sim, step)
+        if step % steps_per_addition == 0
+            current_state = sim.actual_states[(step + 1) % sim.actual_states_stored + 1]
+            new_state = current_state + addition
+            sim.actual_states[(step + 1) % sim.actual_states_stored + 1] = new_state
+        end
+    end
+    for variable in [:N_η, :T_1_η, :T_2_η, :T_r_η, :T_1_μ, :T_2_μ, :T_r_μ, :A_1, :A_2, :I]
+        plot()
+        if E !== nothing hline!([getfield(E, variable)], label="Equilibrium", color=:red, lw=2, ls=:dash) end
+        plot_variable(sim, variable)
+        save_plot(variable, prefix=name)
+    end
+    plot()
+    plot_multiple_variables(sim, [:T_1_η, :T_2_η, :T_r_η, :T_1_μ, :T_2_μ, :T_r_μ])
+    save_plot("T_cells", prefix=name)
+    plot()
+    plot_multiple_variables(sim, [:A_1, :A_2])
     save_plot("APCs", prefix=name)
     println("Done")
 end
