@@ -80,7 +80,7 @@ mutable struct Simulation
         new(params, Δ, d_τ1, d_τ2, d_τ3, actual_states_stored, actual_states, max(1, save_every_nth_step), [])
     end
 end
-function perform_step!(sim::Simulation, step::Int)
+function perform_step!(sim::Simulation, step::Int; force_push::Bool=false)
     p = sim.params
     Δ = sim.Δ
     s = sim.actual_states[step % sim.actual_states_stored + 1]
@@ -88,7 +88,7 @@ function perform_step!(sim::Simulation, step::Int)
     s_τ2 = sim.actual_states[(step + sim.actual_states_stored - sim.d_τ2) % sim.actual_states_stored + 1]
     s_τ3 = sim.actual_states[(step + sim.actual_states_stored - sim.d_τ3) % sim.actual_states_stored + 1]
 
-    if step % sim.save_every_nth_step == 0 push!(sim.saved_states, s) end
+    if step % sim.save_every_nth_step == 0 || force_push push!(sim.saved_states, s) end
 
     new_state = SimulationState(
         s.t + Δ,
@@ -196,7 +196,7 @@ function perform_experiment_with_repeated_addition(S::SimulationState, name::Str
     steps_per_addition = Int(floor(addition_interval / sim.Δ))
     total_steps = Int(floor(time / sim.Δ))
     for step in 1:total_steps
-        perform_step!(sim, step)
+        perform_step!(sim, step, force_push=(step % steps_per_addition == 0))
         if step % steps_per_addition == 0
             current_state = sim.actual_states[(step + 1) % sim.actual_states_stored + 1]
             new_state = current_state + addition
@@ -206,14 +206,14 @@ function perform_experiment_with_repeated_addition(S::SimulationState, name::Str
     for variable in [:N_η, :T_1_η, :T_2_η, :T_r_η, :T_1_μ, :T_2_μ, :T_r_μ, :A_1, :A_2, :I]
         plot()
         if E !== nothing hline!([getfield(E, variable)], label="Equilibrium", color=:red, lw=2, ls=:dash) end
-        plot_variable(sim, variable)
+        plot_variable(sim, variable, max_points_roughly=100000)
         save_plot(variable, prefix=name)
     end
     plot()
-    plot_multiple_variables(sim, [:T_1_η, :T_2_η, :T_r_η, :T_1_μ, :T_2_μ, :T_r_μ])
+    plot_multiple_variables(sim, [:T_1_η, :T_2_η, :T_r_η, :T_1_μ, :T_2_μ, :T_r_μ], max_points_roughly=100000)
     save_plot("T_cells", prefix=name)
     plot()
-    plot_multiple_variables(sim, [:A_1, :A_2])
+    plot_multiple_variables(sim, [:A_1, :A_2], max_points_roughly=100000)
     save_plot("APCs", prefix=name)
     println("Done")
 end
